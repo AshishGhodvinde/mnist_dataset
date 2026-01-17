@@ -701,10 +701,10 @@ class EducationalNeuralNetworkVisualizer:
                 self.draw_educational_connections(
                         (self.hidden1_x, self.hidden1_y),
                         (self.hidden2_x, self.hidden2_y),
-                        256,  # Hidden layer 1 size
-                        128,  # Hidden layer 2 size
-                        self.hidden1_activations if hasattr(self, 'hidden1_activations') else np.zeros(256),
-                        self.hidden2_activations if hasattr(self, 'hidden2_activations') else np.zeros(128),
+                        128,  # Hidden layer 1 size (matches CNN fc1)
+                        64,   # Hidden layer 2 size (matches CNN conv2 features)
+                        self.hidden1_activations if hasattr(self, 'hidden1_activations') else np.zeros(128),
+                        self.hidden2_activations if hasattr(self, 'hidden2_activations') else np.zeros(64),
                         progress=progress2,
                         layer_name="hidden1_to_hidden2"
                     )
@@ -714,9 +714,9 @@ class EducationalNeuralNetworkVisualizer:
                 self.draw_educational_connections(
                         (self.hidden2_x, self.hidden2_y),
                         (self.output_x, self.output_y),
-                        128,  # Hidden layer 2 size
+                        64,   # Hidden layer 2 size (matches CNN conv2 features)
                         10,   # Output layer size
-                        self.hidden2_activations if hasattr(self, 'hidden2_activations') else np.zeros(128),
+                        self.hidden2_activations if hasattr(self, 'hidden2_activations') else np.zeros(64),
                         self.predictions if self.predictions is not None else np.zeros(10),
                         progress=progress3,
                         layer_name="hidden2_to_output"
@@ -733,7 +733,7 @@ class EducationalNeuralNetworkVisualizer:
                     top_k = 3
                     top_indices = np.argsort(contributions)[-top_k:]
                     
-                    hidden2_spacing = 400 / 128
+                    hidden2_spacing = 400 / 64  # Updated to match actual layer size
                     
                     for idx in top_indices:
                         y = self.hidden2_y + idx * hidden2_spacing
