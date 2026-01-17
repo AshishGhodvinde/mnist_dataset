@@ -12,6 +12,7 @@ import os
 import requests
 import threading
 from queue import Queue
+import math
 
 class EducationalNeuralNetworkVisualizer:
     def __init__(self, width=1600, height=900, server_url="http://localhost:5000"):
@@ -136,6 +137,9 @@ class EducationalNeuralNetworkVisualizer:
             self.font_large = pygame.font.SysFont('Arial', 40)
             self.font_title = pygame.font.SysFont('Arial', 36)
         
+        # Add screen rect for clipping
+        self.screen_rect = self.screen.get_rect()
+        
         # Status
         self.model_ready = model_loaded
         self.last_prediction_time = 0
@@ -243,8 +247,10 @@ class EducationalNeuralNetworkVisualizer:
             glow_radius = radius + int(activation * 12)
             for i in range(3):
                 alpha = 30 - i * 10
-                glow_color = (*color, alpha)
-                pygame.draw.circle(self.screen, color, (x, y), glow_radius - i * 3, 1)
+                # Ensure coordinates are valid integers
+                center_x, center_y = int(x), int(y)
+                current_radius = max(1, glow_radius - i * 3)
+                pygame.draw.circle(self.screen, color, (center_x, center_y), current_radius, 1)
         
         # Draw neuron
         pygame.draw.circle(self.screen, color, (x, y), radius)
@@ -263,13 +269,13 @@ class EducationalNeuralNetworkVisualizer:
         
         # Determine connection color based on layer_name
         if layer_name == "input_to_hidden1":
-            base_color = (0, 100, 255)  # BLUE for Input → Hidden Layer 1
+            base_color = (0, 150, 255)  # BRIGHTER BLUE for Input → Hidden Layer 1
         elif layer_name == "hidden1_to_hidden2":
-            base_color = (255, 255, 0)  # YELLOW for Hidden Layer 1 → Hidden Layer 2
+            base_color = (255, 255, 100)  # BRIGHTER YELLOW for Hidden Layer 1 → Hidden Layer 2
         elif layer_name == "hidden2_to_output":
-            base_color = (0, 255, 0)  # GREEN for Hidden Layer 2 → Output
+            base_color = (100, 255, 100)  # BRIGHTER GREEN for Hidden Layer 2 → Output
         else:
-            base_color = (128, 128, 128)  # Default gray
+            base_color = (200, 200, 200)  # Brighter default gray
         
         # Draw more connections for better visualization
         max_connections = 100  # Increased for more impressive animation
@@ -715,8 +721,48 @@ class EducationalNeuralNetworkVisualizer:
                         progress=progress3,
                         layer_name="hidden2_to_output"
                     )
-            
-            # Draw UI elements
+                
+                # Highlight top-3 contributing hidden layer 2 neurons (NO thick lines)
+                if self.animation_phase >= 1.0 and hasattr(self, 'hidden2_activations') and self.predictions is not None:
+                    # Contribution proxy: activation × confidence of predicted digit
+                    predicted_digit = np.argmax(self.predictions)
+                    confidence = self.predictions[predicted_digit]
+                    
+                    contributions = np.abs(self.hidden2_activations) * confidence
+                    
+                    top_k = 3
+                    top_indices = np.argsort(contributions)[-top_k:]
+                    
+                    hidden2_spacing = 400 / 128
+                    
+                    for idx in top_indices:
+                        y = self.hidden2_y + idx * hidden2_spacing
+                        y = max(self.hidden2_y, min(self.hidden2_y + 400, y))
+                        
+                        pulse = abs(math.sin(time.time() * 2.5))
+                        green = int(180 + 75 * pulse)
+                        
+                        glow_color = (0, green, 0)
+                        
+                        # Soft glow rings
+                        for r in range(12, 20, 3):
+                            pygame.draw.circle(
+                                self.screen,
+                                glow_color,
+                                (int(self.hidden2_x), int(y)),
+                                r,
+                                2
+                            )
+                        
+                        # Core highlight
+                        pygame.draw.circle(
+                            self.screen,
+                            (0, 255, 0),
+                            (int(self.hidden2_x), int(y)),
+                            8
+                        )
+                
+                # Draw UI elements
             self.draw_ui_elements()
             
             # Draw prediction display
