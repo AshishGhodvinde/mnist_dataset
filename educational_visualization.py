@@ -272,9 +272,9 @@ class EducationalNeuralNetworkVisualizer:
             base_color = (128, 128, 128)  # Default gray
         
         # Draw more connections for better visualization
-        max_connections = 50
-        step1 = max(1, size1 // 15)
-        step2 = max(1, size2 // 8)
+        max_connections = 100  # Increased for more impressive animation
+        step1 = max(1, size1 // 10)  # More connections from input layer
+        step2 = max(1, size2 // 6)   # More connections between hidden layers
         
         for i in range(0, min(size1, len(activations1)), step1):
             for j in range(0, min(size2, len(activations2)), step2):
@@ -288,12 +288,17 @@ class EducationalNeuralNetworkVisualizer:
                 neuron2_y = y2 + j * spacing2
                 
                 # Connection strength based on activations
-                strength = activations1[i] * activations2[j] * progress
-                if strength > 0.02:  # Lower threshold for more visible connections
-                    alpha = min(255, int(strength * 255))
+                # Use normalized activations for better visibility
+                norm_act1 = min(1.0, abs(activations1[i]) * 10)  # Scale up for visibility
+                norm_act2 = min(1.0, abs(activations2[j]) * 10)  # Scale up for visibility
+                strength = norm_act1 * norm_act2 * progress
+                
+                # Always draw connections with some visibility
+                if strength > 0.01 or progress > 0.1:  # Lower threshold and show during animation
+                    alpha = min(255, max(50, int(strength * 255)))  # Minimum alpha for visibility
                     
                     # Line thickness reflects influence strength
-                    thickness = max(1, min(4, int(strength * 5)))
+                    thickness = max(2, min(6, int(strength * 6)))  # Thicker lines
                     
                     # Apply color with alpha
                     color = tuple(int(c * alpha / 255) for c in base_color)
@@ -664,16 +669,26 @@ class EducationalNeuralNetworkVisualizer:
             if self.animation_phase > 0:
                 # Step 1: Input to Hidden Layer 1 (0-2s)
                 progress1 = min(1.0, self.animation_phase * 3.0)  # Complete by 0.33
-                self.draw_educational_connections(
-                        (self.input_x + 140, self.input_y + 140),  # Center of 28x28 grid
-                        (self.hidden1_x, self.hidden1_y),
-                        784,  # All 784 pixels
-                        256,  # Hidden layer 1 size
-                        self.activations[:784] if self.activations is not None else np.zeros(784),
-                        self.hidden1_activations if hasattr(self, 'hidden1_activations') else np.zeros(256),
-                        progress=progress1,
-                        layer_name="input_to_hidden1"
-                    )
+                # Create multiple connection points from the grid for better visual sync
+                grid_points = []
+                for row in range(0, 28, 4):  # Sample every 4th row
+                    for col in range(0, 28, 4):  # Sample every 4th column
+                        grid_x = self.input_x + col * 10 + 5  # Center of grid cell
+                        grid_y = self.input_y + row * 10 + 5  # Center of grid cell
+                        grid_points.append((grid_x, grid_y))
+                
+                # Draw connections from multiple grid points
+                for grid_x, grid_y in grid_points[:49]:  # Limit to 49 points (7x7)
+                    self.draw_educational_connections(
+                            (grid_x, grid_y),  # Individual grid point
+                            (self.hidden1_x, self.hidden1_y),
+                            1,  # Single point
+                            256,  # Hidden layer 1 size
+                            np.array([1.0]),  # Single activation
+                            self.hidden1_activations if hasattr(self, 'hidden1_activations') else np.zeros(256),
+                            progress=progress1,
+                            layer_name="input_to_hidden1"
+                        )
                 
                 # Step 2: Hidden Layer 1 to Hidden Layer 2 (2s-4s)
                 progress2 = min(1.0, max(0, (self.animation_phase - 0.33) * 1.5))  # Start at 0.33, complete by 1.0
@@ -689,7 +704,7 @@ class EducationalNeuralNetworkVisualizer:
                     )
                 
                 # Step 3: Hidden Layer 2 to Output (4s-6s)
-                progress3 = min(1.0, max(0, (self.animation_phase - 1.0) * 1.5))  # Start at 1.0, complete by 1.67
+                progress3 = min(1.0, max(0, (self.animation_phase - 0.67) * 3.0))  # Start at 0.67, complete by 1.0
                 self.draw_educational_connections(
                         (self.hidden2_x, self.hidden2_y),
                         (self.output_x, self.output_y),
