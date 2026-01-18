@@ -201,7 +201,7 @@ class EducationalNeuralNetworkVisualizer:
                 data = response.json()
                 if data.get('clear'):
                     print("📱 Clear signal received, clearing display")
-                    # Clear the laptop display
+                    # Clear the laptop display but keep running
                     self.latest_mobile_digit = None
                     self.activations = None
                     self.predictions = None
@@ -287,10 +287,21 @@ class EducationalNeuralNetworkVisualizer:
                 x1, y1 = layer1_pos
                 x2, y2 = layer2_pos
                 
-                spacing1 = 400 / max(size1, 1)
-                spacing2 = 400 / max(size2, 1)
+                # Special handling for input layer (28x28 grid)
+                if size1 == 784:  # Input layer
+                    # Calculate grid position for input neuron
+                    row = i // 28
+                    col = i % 28
+                    neuron1_x = x1 + col * 10 + 5  # Center of grid cell
+                    neuron1_y = y1 + row * 10 + 5  # Center of grid cell
+                else:
+                    # Regular vertical layout for other layers
+                    spacing1 = 400 / max(size1, 1)
+                    neuron1_x = x1
+                    neuron1_y = y1 + i * spacing1
                 
-                neuron1_y = y1 + i * spacing1
+                spacing2 = 400 / max(size2, 1)
+                neuron2_x = x2
                 neuron2_y = y2 + j * spacing2
                 
                 # Connection strength based on activations
@@ -311,11 +322,11 @@ class EducationalNeuralNetworkVisualizer:
                     
                     # Animated connection
                     if progress < 1.0:
-                        end_x = x1 + (x2 - x1) * progress
+                        end_x = neuron1_x + (neuron2_x - neuron1_x) * progress
                         end_y = neuron1_y + (neuron2_y - neuron1_y) * progress
-                        pygame.draw.line(self.screen, color, (x1, neuron1_y), (end_x, end_y), thickness)
+                        pygame.draw.line(self.screen, color, (neuron1_x, neuron1_y), (end_x, end_y), thickness)
                     else:
-                        pygame.draw.line(self.screen, color, (x1, neuron1_y), (x2, neuron2_y), thickness)
+                        pygame.draw.line(self.screen, color, (neuron1_x, neuron1_y), (neuron2_x, neuron2_y), thickness)
     
     def draw_input_layer_educational(self):
         # Draw title and explanation
@@ -673,54 +684,105 @@ class EducationalNeuralNetworkVisualizer:
             
             # Draw animated connections with proper timing
             if self.animation_phase > 0:
-                # Step 1: Input to Hidden Layer 1 (0-2s)
+                # Step 1: Input to Hidden Layer 1 (0-2s) - 0 to 0.33
                 progress1 = min(1.0, self.animation_phase * 3.0)  # Complete by 0.33
-                # Create multiple connection points from the grid for better visual sync
-                grid_points = []
-                for row in range(0, 28, 4):  # Sample every 4th row
-                    for col in range(0, 28, 4):  # Sample every 4th column
-                        grid_x = self.input_x + col * 10 + 5  # Center of grid cell
-                        grid_y = self.input_y + row * 10 + 5  # Center of grid cell
-                        grid_points.append((grid_x, grid_y))
                 
-                # Draw connections from multiple grid points
-                for grid_x, grid_y in grid_points[:49]:  # Limit to 49 points (7x7)
+                # Draw connections from ALL input neurons to ALL hidden layer 1 neurons
+                # Create scanning effect - only activate cells with non-zero values
+                total_input_cells = 784
+                cells_to_activate = int(total_input_cells * progress1)
+                
+                # Get indices of non-zero cells (actual drawn pixels)
+                non_zero_indices = []
+                neighboring_indices = []
+                
+                if hasattr(self, 'activations') and self.activations is not None and len(self.activations) > 0:
+                    # First, find all non-zero cells
+                    for i, activation in enumerate(self.activations):
+                        if activation > 0.01:  # Threshold for "visible" pixels
+                            non_zero_indices.append(i)
+                    
+                    # Then, add neighboring cells for more natural visualization
+                    for cell_idx in non_zero_indices:
+                        row = cell_idx // 28
+                        col = cell_idx % 28
+                        
+                        # Add neighboring cells (8-directional)
+                        for dr in [-1, 0, 1]:
+                            for dc in [-1, 0, 1]:
+                                if dr == 0 and dc == 0:
+                                    continue  # Skip the original cell
+                                
+                                new_row, new_col = row + dr, col + dc
+                                if 0 <= new_row < 28 and 0 <= new_col < 28:
+                                    neighbor_idx = new_row * 28 + new_col
+                                    if neighbor_idx not in neighboring_indices and neighbor_idx not in non_zero_indices:
+                                        neighboring_indices.append(neighbor_idx)
+                
+                # Combine non-zero and neighboring cells
+                all_active_indices = non_zero_indices + neighboring_indices
+                
+                # If no activations, use a few sample cells for demonstration
+                if len(all_active_indices) == 0:
+                    all_active_indices = list(range(0, min(50, total_input_cells), 10))  # Sample every 10th cell
+                
+                # Calculate how many cells to activate based on progress
+                cells_to_activate = min(len(all_active_indices), int(len(all_active_indices) * progress1))
+                
+                for idx in range(cells_to_activate):
+                    cell_idx = all_active_indices[idx]
+                    # Calculate grid position for this input cell
+                    row = cell_idx // 28
+                    col = cell_idx % 28
+                    cell_x = self.input_x + col * 10 + 5  # Center of grid cell
+                    cell_y = self.input_y + row * 10 + 5  # Center of grid cell
+                    
+                    # Draw connections from this cell to ALL hidden layer 1 neurons
+                    # Safe activation value access
+                    activation_value = 1.0
+                    if self.activations is not None and cell_idx < len(self.activations):
+                        activation_value = self.activations[cell_idx]
+                    
                     self.draw_educational_connections(
-                            (grid_x, grid_y),  # Individual grid point
+                            (cell_x, cell_y),  # Individual cell position
                             (self.hidden1_x, self.hidden1_y),
-                            1,  # Single point
-                            256,  # Hidden layer 1 size
-                            np.array([1.0]),  # Single activation
-                            self.hidden1_activations if hasattr(self, 'hidden1_activations') else np.zeros(256),
-                            progress=progress1,
+                            1,  # Single input cell
+                            256,  # All hidden layer 1 neurons
+                            np.array([activation_value]),
+                            self.hidden1_activations if hasattr(self, 'hidden1_activations') and self.hidden1_activations is not None else np.zeros(256),
+                            progress=1.0,  # Full progress for activated cells
                             layer_name="input_to_hidden1"
                         )
                 
-                # Step 2: Hidden Layer 1 to Hidden Layer 2 (2s-4s)
-                progress2 = min(1.0, max(0, (self.animation_phase - 0.33) * 1.5))  # Start at 0.33, complete by 1.0
-                self.draw_educational_connections(
-                        (self.hidden1_x, self.hidden1_y),
-                        (self.hidden2_x, self.hidden2_y),
-                        128,  # Hidden layer 1 size (matches CNN fc1)
-                        64,   # Hidden layer 2 size (matches CNN conv2 features)
-                        self.hidden1_activations if hasattr(self, 'hidden1_activations') else np.zeros(128),
-                        self.hidden2_activations if hasattr(self, 'hidden2_activations') else np.zeros(64),
-                        progress=progress2,
-                        layer_name="hidden1_to_hidden2"
-                    )
+                # Keep previously drawn lines visible (don't clear them)
                 
-                # Step 3: Hidden Layer 2 to Output (4s-6s)
-                progress3 = min(1.0, max(0, (self.animation_phase - 0.67) * 3.0))  # Start at 0.67, complete by 1.0
-                self.draw_educational_connections(
-                        (self.hidden2_x, self.hidden2_y),
-                        (self.output_x, self.output_y),
-                        64,   # Hidden layer 2 size (matches CNN conv2 features)
-                        10,   # Output layer size
-                        self.hidden2_activations if hasattr(self, 'hidden2_activations') else np.zeros(64),
-                        self.predictions if self.predictions is not None else np.zeros(10),
-                        progress=progress3,
-                        layer_name="hidden2_to_output"
-                    )
+                # Step 2: Hidden Layer 1 to Hidden Layer 2 (2s-4s) - 0.33 to 0.67
+                if self.animation_phase > 0.33:
+                    progress2 = min(1.0, (self.animation_phase - 0.33) * 3.0)  # Start at 0.33, complete by 0.67
+                    self.draw_educational_connections(
+                            (self.hidden1_x, self.hidden1_y),
+                            (self.hidden2_x, self.hidden2_y),
+                            128,  # Hidden layer 1 size (matches CNN fc1)
+                            64,   # Hidden layer 2 size (matches CNN conv2 features)
+                            self.hidden1_activations if hasattr(self, 'hidden1_activations') else np.zeros(128),
+                            self.hidden2_activations if hasattr(self, 'hidden2_activations') else np.zeros(64),
+                            progress=progress2,
+                            layer_name="hidden1_to_hidden2"
+                        )
+                
+                # Step 3: Hidden Layer 2 to Output (4s-6s) - 0.67 to 1.0
+                if self.animation_phase > 0.67:
+                    progress3 = min(1.0, (self.animation_phase - 0.67) * 3.0)  # Start at 0.67, complete by 1.0
+                    self.draw_educational_connections(
+                            (self.hidden2_x, self.hidden2_y),
+                            (self.output_x, self.output_y),
+                            64,   # Hidden layer 2 size (matches CNN conv2 features)
+                            10,   # Output layer size
+                            self.hidden2_activations if hasattr(self, 'hidden2_activations') else np.zeros(64),
+                            self.predictions if hasattr(self, 'predictions') else np.zeros(10),
+                            progress=progress3,
+                            layer_name="hidden2_to_output"
+                        )
                 
                 # Highlight top-3 contributing hidden layer 2 neurons (NO thick lines)
                 if self.animation_phase >= 1.0 and hasattr(self, 'hidden2_activations') and self.predictions is not None:
