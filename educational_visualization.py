@@ -13,6 +13,108 @@ import requests
 import threading
 from queue import Queue
 import math
+import serial
+import serial.tools.list_ports
+
+class ArduinoDisplay:
+    """Helper class to send predicted digits to Arduino via serial"""
+    
+    def __init__(self, baud_rate=9600):
+        self.serial_port = None
+        self.baud_rate = baud_rate
+        self.connected = False
+        self._connect()
+    
+    def _connect(self):
+        """Try to connect to Arduino automatically"""
+        try:
+            # Debug: List all available ports
+            ports = serial.tools.list_ports.comports()
+            print(f"🔍 Available COM ports:")
+            for i, port in enumerate(ports):
+                print(f"  {i}: {port.device} - {port.description}")
+            
+            arduino_port = None
+            
+            # Look for common Arduino names
+            for port in ports:
+                print(f"🔍 Checking port: {port.device} - {port.description}")
+                if any(name in port.description.lower() for name in ['arduino', 'ch340', 'cp210', 'ftdi']):
+                    arduino_port = port.device
+                    print(f"✅ Found Arduino on: {arduino_port}")
+                    break
+            
+            # If no Arduino found, try first available port
+            if not arduino_port and ports:
+                arduino_port = ports[0].device
+                print(f"⚠️ No Arduino found, trying first port: {arduino_port}")
+            
+            if arduino_port:
+                print(f"🔌 Attempting to connect to {arduino_port} at {self.baud_rate} baud...")
+                self.serial_port = serial.Serial(arduino_port, self.baud_rate, timeout=1)
+                self.connected = True
+                print(f"✅ Arduino connected successfully on {arduino_port}")
+                
+                # Test connection by sending a clear command
+                try:
+                    self.serial_port.write('C'.encode())
+                    print("🧹 Sent test clear command to Arduino")
+                except Exception as test_e:
+                    print(f"⚠️ Test command failed: {test_e}")
+            else:
+                print("❌ No serial ports available - Arduino connection failed")
+        except Exception as e:
+            print(f"❌ Arduino connection failed: {e}")
+            print("💡 Make sure:")
+            print("   - Arduino is connected via USB")
+            print("   - Drivers are installed (CH340/CP210)")
+            print("   - Arduino is not being used by another program")
+            print("   - Correct COM port is available")
+            self.connected = False
+    
+    def send_digit(self, digit):
+        """Send a single digit (0-9) to Arduino"""
+        if not self.connected or self.serial_port is None:
+            print(f"⚠️ Cannot send digit {digit} - Arduino not connected")
+            return
+        
+        try:
+            if digit is not None and 0 <= digit <= 9:
+                # Send as ASCII character
+                data_to_send = str(digit).encode()
+                print(f"📟 Sending digit {digit} as bytes: {data_to_send}")
+                self.serial_port.write(data_to_send)
+                self.serial_port.flush()  # Ensure data is sent immediately
+                print(f"✅ Successfully sent digit {digit} to Arduino")
+            else:
+                print(f"⚠️ Invalid digit: {digit} (must be 0-9)")
+        except Exception as e:
+            print(f"❌ Failed to send digit {digit} to Arduino: {e}")
+            # Try to reconnect on next send
+            self.connected = False
+    
+    def clear_display(self):
+        """Send clear command to Arduino 7-segment display"""
+        if not self.connected or self.serial_port is None:
+            print("⚠️ Cannot clear display - Arduino not connected")
+            return
+        
+        try:
+            # Send 'C' character to clear display
+            data_to_send = 'C'.encode()
+            print(f"🧹 Sending clear command as bytes: {data_to_send}")
+            self.serial_port.write(data_to_send)
+            self.serial_port.flush()  # Ensure data is sent immediately
+            print("✅ Successfully cleared Arduino 7-segment display")
+        except Exception as e:
+            print(f"❌ Failed to clear Arduino display: {e}")
+            # Try to reconnect on next operation
+            self.connected = False
+    
+    def __del__(self):
+        """Cleanup serial connection"""
+        if self.serial_port and self.serial_port.is_open:
+            self.serial_port.close()
 
 class EducationalNeuralNetworkVisualizer:
     def __init__(self, width=1600, height=900, server_url="http://localhost:5000"):
@@ -146,6 +248,9 @@ class EducationalNeuralNetworkVisualizer:
         self.show_explanations = True
         self.processing_digit = False  # Add flag to prevent repeated processing
         
+        # Initialize Arduino display
+        self.arduino = ArduinoDisplay()
+        
     def start_mobile_polling(self):
         """Start background thread to poll mobile server for digit input"""
         def poll_mobile():
@@ -210,6 +315,9 @@ class EducationalNeuralNetworkVisualizer:
                     self.animation_time = 0
                     self.animation_phase = 0
                     self.processing_digit = False  # Reset processing flag
+                    
+                    # Clear Arduino 7-segment display
+                    self.arduino.clear_display()
                     return True
         except Exception as e:
             print(f"Error checking clear signal: {e}")
@@ -485,6 +593,9 @@ class EducationalNeuralNetworkVisualizer:
             # Get prediction
             self.predicted_digit = np.argmax(self.predictions)
             self.confidence = self.predictions[self.predicted_digit]
+            
+            # Send digit to Arduino 7-segment display
+            self.arduino.send_digit(self.predicted_digit)
             
             # Start animation
             self.animation_time = time.time()
